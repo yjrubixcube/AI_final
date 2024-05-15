@@ -5,6 +5,8 @@ from pathlib import Path
 from neural import MarioNet
 from collections import deque
 
+from itertools import islice
+
 
 class Mario:
     def __init__(self, state_dim, action_dim, save_dir, checkpoint=None):
@@ -23,7 +25,8 @@ class Mario:
         self.learn_every = 3   # no. of experiences between updates to Q_online
         self.sync_every = 1e4   # no. of experiences between Q_target & Q_online sync
 
-        self.MAX_MEM_LEN = 10000
+        self.MAX_MEM_LEN = 50000
+
         self.save_every = 5e5   # no. of experiences between saving Mario Net
         self.save_dir = save_dir
 
@@ -90,8 +93,10 @@ class Mario:
         # done = torch.BoolTensor([done]).cuda() if self.use_cuda else torch.BoolTensor([done])
 
         self.memory.append( (save_state, save_next_state, action, reward, done,) )
-        if len(self.memory) > self.MAX_MEM_LEN:
-            self.memory = self.memory[-self.MAX_MEM_LEN:]
+        l = len(self.memory)
+        if l > self.MAX_MEM_LEN:
+            # self.memory = self.memory[-self.MAX_MEM_LEN:]
+            self.memory = deque(islice(self.memory, l-self.MAX_MEM_LEN, None))
 
 
     def recall(self):
