@@ -1,4 +1,7 @@
 import os
+
+import gym.wrappers
+import gym.wrappers.frame_stack
 os.environ['KMP_DUPLICATE_LIB_OK']='True'
 
 import random, datetime
