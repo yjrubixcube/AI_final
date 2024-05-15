@@ -14,7 +14,7 @@ from agent import Mario
 from wrappers import ResizeObservation, SkipFrame
 
 # Initialize Super Mario environment
-env = gym_super_mario_bros.make('SuperMarioBros-1-1-v0')
+env = gym_super_mario_bros.make('SuperMarioBros-1-1-v3')
 
 # Limit the action-space to
 #   0. walk right
