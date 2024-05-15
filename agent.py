@@ -25,7 +25,7 @@ class Mario:
         self.learn_every = 3   # no. of experiences between updates to Q_online
         self.sync_every = 1e4   # no. of experiences between Q_target & Q_online sync
 
-        self.MAX_MEM_LEN = 50000
+        self.MAX_MEM_LEN = 20000
 
         self.save_every = 5e5   # no. of experiences between saving Mario Net
         self.save_dir = save_dir
@@ -83,8 +83,15 @@ class Mario:
         reward (float),
         done(bool))
         """
-        save_state = np.array(state)
-        save_next_state = np.array(next_state)
+        # save_state = np.array(state)
+        # save_next_state = np.array(next_state)
+        
+        save_state = torch.FloatTensor(np.array(state)).cuda() if self.use_cuda else torch.FloatTensor(state)
+        save_next_state = torch.FloatTensor(np.array(next_state)).cuda() if self.use_cuda else torch.FloatTensor(next_state)
+        action = torch.LongTensor([action]).cuda() if self.use_cuda else torch.LongTensor([action])
+        reward = torch.DoubleTensor([reward]).cuda() if self.use_cuda else torch.DoubleTensor([reward])
+        done = torch.BoolTensor([done]).cuda() if self.use_cuda else torch.BoolTensor([done])
+
 
         # state = torch.FloatTensor(state).cuda() if self.use_cuda else torch.FloatTensor(state)
         # next_state = torch.FloatTensor(next_state).cuda() if self.use_cuda else torch.FloatTensor(next_state)
@@ -96,7 +103,7 @@ class Mario:
         l = len(self.memory)
         if l > self.MAX_MEM_LEN:
             # self.memory = self.memory[-self.MAX_MEM_LEN:]
-            self.memory = deque(islice(self.memory, l-self.MAX_MEM_LEN, None))
+            self.memory = deque(islice(self.memory, l-self.MAX_MEM_LEN//2, None))
 
 
     def recall(self):
