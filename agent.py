@@ -110,7 +110,7 @@ class Mario:
         """
         Retrieve a batch of experiences from memory
         """
-        print("recall")
+        # print("recall")
         batch = random.sample(self.memory, self.batch_size)
         state, next_state, action, reward, done = map(torch.stack, zip(*batch))
         return state, next_state, action.squeeze(), reward.squeeze(), done.squeeze()
