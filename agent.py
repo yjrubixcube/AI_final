@@ -9,7 +9,7 @@ from itertools import islice
 
 
 class Mario:
-    def __init__(self, state_dim, action_dim, save_dir, checkpoint=None):
+    def __init__(self, state_dim, action_dim, save_dir, optimizer, checkpoint=None):
         self.state_dim = state_dim
         self.action_dim = action_dim
         self.memory = deque(maxlen=100000)
@@ -39,7 +39,8 @@ class Mario:
         if checkpoint:
             self.load(checkpoint)
 
-        self.optimizer = torch.optim.Adam(self.net.parameters(), lr=0.00025)
+        # self.optimizer = torch.optim.Adam(self.net.parameters(), lr=0.00025)
+        self.optimizer = optimizer
         self.loss_fn = torch.nn.SmoothL1Loss()
 
 
@@ -129,10 +130,15 @@ class Mario:
         return (reward + (1 - done.float()) * self.gamma * next_Q).float()
 
 
-    def update_Q_online(self, td_estimate, td_target) :
+    def update_Q_online(self, td_estimate, td_target, GlobalMario) :
         loss = self.loss_fn(td_estimate, td_target)
         self.optimizer.zero_grad()
         loss.backward()
+        # 
+        for local_p, global_p in zip(self.net.parameters(), GlobalMario.net.parameters()):
+            if global_p.grad is not None:
+                break
+            global_p._grad = local_p.grad
         self.optimizer.step()
         return loss.item()
 
@@ -141,11 +147,11 @@ class Mario:
         self.net.target.load_state_dict(self.net.online.state_dict())
 
 
-    def learn(self):
+    def learn(self, GlobalMario):
         if self.curr_step % self.sync_every == 0:
             self.sync_Q_target()
 
-        if self.curr_step % self.save_every == 0:
+        if self.curr_step % self.save_every == 0 and self.save_dir:
             self.save()
 
         if self.curr_step < self.burnin:
@@ -164,7 +170,7 @@ class Mario:
         td_tgt = self.td_target(reward, next_state, done)
 
         # Backpropagate loss through Q_online
-        loss = self.update_Q_online(td_est, td_tgt)
+        loss = self.update_Q_online(td_est, td_tgt, GlobalMario)
 
         return (td_est.mean().item(), loss)
 
