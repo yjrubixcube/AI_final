@@ -21,26 +21,36 @@ class Mario:
         self.gamma = 0.9
 
         self.curr_step = 0
-        self.burnin = 1e5  # min. experiences before training
+        # self.burnin = 1e5  # min. experiences before training
+        self.burnin = 12500  # min. experiences before training
         self.learn_every = 3   # no. of experiences between updates to Q_online
-        self.sync_every = 1e4   # no. of experiences between Q_target & Q_online sync
+        # self.sync_every = 1e4   # no. of experiences between Q_target & Q_online sync
+        self.sync_every = 1250   # no. of experiences between Q_target & Q_online sync
 
-        self.MAX_MEM_LEN = 20000
+        # self.MAX_MEM_LEN = 20000
+        self.MAX_MEM_LEN = 5000
 
         self.save_every = 5e5   # no. of experiences between saving Mario Net
         self.save_dir = save_dir
+        self.save_index = 0
 
         self.use_cuda = torch.cuda.is_available()
-
+        # self.use_cuda = False
+        print("use cuda", save_dir)
         # Mario's DNN to predict the most optimal action - we implement this in the Learn section
         self.net = MarioNet(self.state_dim, self.action_dim).float()
+        print("net done", save_dir)
         if self.use_cuda:
             self.net = self.net.to(device='cuda')
         if checkpoint:
             self.load(checkpoint)
 
         # self.optimizer = torch.optim.Adam(self.net.parameters(), lr=0.00025)
-        self.optimizer = optimizer
+        if optimizer:
+            self.optimizer = optimizer
+        else:
+            self.optimizer = torch.optim.Adam(self.net.parameters(), lr=0.00025)
+            
         self.loss_fn = torch.nn.SmoothL1Loss()
 
 
@@ -176,7 +186,9 @@ class Mario:
 
 
     def save(self):
-        save_path = self.save_dir / f"mario_net_{int(self.curr_step // self.save_every)}.chkpt"
+        # save_path = self.save_dir / f"mario_net_{int(self.curr_step // self.save_every)}.chkpt"
+        save_path = self.save_dir / f"mario_net_{self.save_index}.chkpt"
+        self.save_index += 1
         torch.save(
             dict(
                 model=self.net.state_dict(),

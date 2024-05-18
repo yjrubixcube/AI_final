@@ -1,4 +1,5 @@
 import os
+import time
 
 import gym.wrappers
 import gym.wrappers.frame_stack
@@ -21,13 +22,16 @@ from wrappers import ResizeObservation, SkipFrame
 from neural import MarioNet
 
 NUM_PROCESS = 4
+# episodes = 
 
-def train(index, globalMario: Mario, globalOptim: torch.optim.Adam, save_dir=None):
+def train(index, globalMario: Mario, globalOptim: torch.optim.Adam, localMario: Mario, save_dir=None):
+    print("before init", index)
     torch.manual_seed(index)
-    
 
     # Initialize Super Mario environment
     env = gym_super_mario_bros.make('SuperMarioBros-1-1-v0')
+    
+    print("env", index, index)
 
     # Limit the action-space to
     #   0. walk right
@@ -44,21 +48,31 @@ def train(index, globalMario: Mario, globalOptim: torch.optim.Adam, save_dir=Non
     env = ResizeObservation(env, shape=84)
     env = TransformObservation(env, f=lambda x: x / 255.)
     env = FrameStack(env, num_stack=4)
+    
+    print("env before reset", index)
 
     env.reset()
+    
+    print("env reset", index)
 
     # TODO: turn off save for others
-    localMario = Mario(state_dim=(4, 84, 84), action_dim=env.action_space.n, save_dir=save_dir, optimizer=globalOptim)
+    print(env.action_space.n, index)
+    # localMario = Mario(state_dim=(4, 84, 84), action_dim=env.action_space.n, save_dir=save_dir, optimizer=globalOptim)
+    
+    print("done local mario", index)
     localMario.net.train()
     if save_dir:
         logger = MetricLogger(save_dir)
+        print("create logger")
     episodes = 5000
+    # print(localMario.net.state_dict())
 
+    print("start training", index)
     ### for Loop that train the model num_episodes times by playing the game
     for e in range(episodes):
 
-        state = env.reset().cuda()
-        
+        state = env.reset()
+
         localMario.net.load_state_dict(globalMario.net.state_dict())
 
         # Play the game!
@@ -80,7 +94,8 @@ def train(index, globalMario: Mario, globalOptim: torch.optim.Adam, save_dir=Non
             q, loss = localMario.learn(globalMario)
 
             # 8. Logging
-            logger.log_step(reward, loss, q)
+            if save_dir:
+                logger.log_step(reward, loss, q)
 
             # 9. Update state
             state = next_state
@@ -89,7 +104,8 @@ def train(index, globalMario: Mario, globalOptim: torch.optim.Adam, save_dir=Non
             if done or info['flag_get']:
                 break
 
-        logger.log_episode()
+        if save_dir:
+            logger.log_episode()
 
         if e % 20 == 0 and save_dir:
             logger.record(
@@ -97,11 +113,12 @@ def train(index, globalMario: Mario, globalOptim: torch.optim.Adam, save_dir=Non
                 epsilon=localMario.exploration_rate,
                 step=localMario.curr_step
             )
+            localMario.save()
 
 
 if __name__ == "__main__":
 
-    
+    mp.set_start_method("spawn")
 
     save_dir = Path('checkpoints') / datetime.datetime.now().strftime('%Y-%m-%dT%H-%M-%S')
     save_dir.mkdir(parents=True)
@@ -130,24 +147,43 @@ if __name__ == "__main__":
 
 
     # logger = MetricLogger(save_dir)
-    GlobalOptimizer = torch.optim.Adam(MarioNet((4, 84, 84), GlobalEnv.action_space.n).float().parameters(), lr=0.00025)
+    # GlobalOptimizer = torch.optim.Adam(MarioNet((4, 84, 84), GlobalEnv.action_space.n).float().parameters(), lr=0.00025)
     
-    GlobalMario = Mario(state_dim=(4, 84, 84), action_dim=GlobalEnv.action_space.n, save_dir=save_dir, optimizer=GlobalOptimizer)
-    GlobalMario.share_memory()
-    
+    GlobalMario = Mario(state_dim=(4, 84, 84), action_dim=GlobalEnv.action_space.n, save_dir=save_dir, optimizer=None)
+    GlobalMario.net.share_memory()
+    GlobalOptimizer = GlobalMario.optimizer
+    # print("done 1")
+    # GlobalMario2 = Mario(state_dim=(4, 84, 84), action_dim=GlobalEnv.action_space.n, save_dir=save_dir, optimizer=GlobalOptimizer)
+    # GlobalMario2.net.share_memory()
+    # print("done 2")
+    # GlobalMario3 = Mario(state_dim=(4, 84, 84), action_dim=GlobalEnv.action_space.n, save_dir=save_dir, optimizer=GlobalOptimizer)
+    # GlobalMario3.net.share_memory()
+    # print("done 3")
+    # exit()
     # episodes = 40000
-
+    # train(0, GlobalMario, GlobalOptimizer)#, save_dir)
+    # train(1, GlobalMario, GlobalOptimizer)#, save_dir)
+    # exit()
+    
     processes = []
+    local_marios = []
     for i in range(NUM_PROCESS):
         if i == 0:
-            process = mp.Process(target=train, args=(i, GlobalMario, GlobalOptimizer, save_dir))
+            local_mario = Mario(state_dim=(4, 84, 84), action_dim=GlobalEnv.action_space.n, save_dir=save_dir, optimizer=GlobalOptimizer)
         else:
-            process = mp.Process(target=train, args=(i, GlobalMario, GlobalOptimizer))
+            local_mario = Mario(state_dim=(4, 84, 84), action_dim=GlobalEnv.action_space.n, save_dir=None, optimizer=GlobalOptimizer)
+        local_marios.append(local_mario)
+    # exit()
+    for i in range(NUM_PROCESS):
+        if i == 0:
+            process = mp.Process(target=train, args=(i, GlobalMario, GlobalOptimizer, local_marios[i], save_dir))
+        else:
+            process = mp.Process(target=train, args=(i, GlobalMario, GlobalOptimizer, local_marios[i]))
+        process.daemon = True
         process.start()
-        processes.append(processes)
+        processes.append(process)
+        # time.sleep(3)
     
     for p in processes:
         p.join()
-
-   
     

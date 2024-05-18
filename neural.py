@@ -26,9 +26,7 @@ class MarioNet(nn.Module):
             nn.ReLU(),
             nn.Linear(512, output_dim)
         )
-
         self.target = copy.deepcopy(self.online)
-
         # Q_target parameters are frozen.
         for p in self.target.parameters():
             p.requires_grad = False
