@@ -1,0 +1,9 @@
+python3 main.py --num_process=4 \
+                --batch_size=16 \
+                --total_episodes=20000 \
+                --eps_per_log=20 \
+                --mem_len=5000 \
+                --lr=0.00025 \
+                --save_every=250000 \
+                --moves=simple \
+                --version=3

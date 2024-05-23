@@ -21,10 +21,66 @@ from agent import Mario
 from wrappers import ResizeObservation, SkipFrame
 from neural import MarioNet
 
-NUM_PROCESS = 4
+from argparse import ArgumentParser
+
+# NUM_PROCESS = 4
+
+movement_sets = {
+        "default": [
+            ['right'],
+            ['right', 'A']
+        ],
+        "right": [
+            ['NOOP'],
+            ['right'],
+            ['right', 'A'],
+            ['right', 'B'],
+            ['right', 'A', 'B'],
+        ],
+        "simple": [
+            ['NOOP'],
+            ['right'],
+            ['right', 'A'],
+            ['right', 'B'],
+            ['right', 'A', 'B'],
+            ['A'],
+            ['left'],
+        ],
+        "complex": [
+            ['NOOP'],
+            ['right'],
+            ['right', 'A'],
+            ['right', 'B'],
+            ['right', 'A', 'B'],
+            ['A'],
+            ['left'],
+            ['left', 'A'],
+            ['left', 'B'],
+            ['left', 'A', 'B'],
+            ['down'],
+            ['up'],
+        ]
+    }
+
 # episodes = 
 
-def train(index, globalMario: Mario, globalOptim: torch.optim.Adam, localMario: Mario, save_dir=None):
+def get_args():
+    parser = ArgumentParser()
+    parser.add_argument("--num_process", type=int, default=4)
+    parser.add_argument("--batch_size", type=int, default=32)
+    parser.add_argument("--total_episodes", type=int, default=20000)
+    parser.add_argument("--eps_per_log", type=int, default=20)
+    parser.add_argument("--mem_len", type=int, default=5000)
+    parser.add_argument("--lr", type=float, default=0.00025)
+    parser.add_argument("--save_every", type=int, default=250000)
+    
+    parser.add_argument("--moves", type=str, default="simple", help="right, simple, complex")
+    parser.add_argument("--version", type=int, default=3)
+
+    args = parser.parse_args()
+    return args
+
+def train(opt, index, globalMario: Mario, globalOptim: torch.optim.Adam, localMario: Mario, save_dir=None):
     print("before init", index)
     torch.manual_seed(index)
 
@@ -38,8 +94,7 @@ def train(index, globalMario: Mario, globalOptim: torch.optim.Adam, localMario: 
     #   1. jump right
     env = JoypadSpace(
         env,
-        [['right'],
-        ['right', 'A']]
+        movement_sets[opt.moves]
     )
 
     # Apply Wrappers to environment
@@ -64,7 +119,7 @@ def train(index, globalMario: Mario, globalOptim: torch.optim.Adam, localMario: 
     if save_dir:
         logger = MetricLogger(save_dir)
         print("create logger")
-    episodes = 5000
+    episodes = opt.total_episodes // opt.num_process
     # print(localMario.net.state_dict())
 
     print("start training", index)
@@ -107,7 +162,7 @@ def train(index, globalMario: Mario, globalOptim: torch.optim.Adam, localMario: 
         if save_dir:
             logger.log_episode()
 
-        if e % 20 == 0 and save_dir:
+        if e % opt.eps_per_log == 0 and save_dir:
             logger.record(
                 episode=e,
                 epsilon=localMario.exploration_rate,
@@ -117,6 +172,8 @@ def train(index, globalMario: Mario, globalOptim: torch.optim.Adam, localMario: 
 
 
 if __name__ == "__main__":
+
+    opt = get_args()
 
     mp.set_start_method("spawn")
 
@@ -134,8 +191,7 @@ if __name__ == "__main__":
     #   1. jump right
     GlobalEnv = JoypadSpace(
         GlobalEnv,
-        [['right'],
-        ['right', 'A']]
+        movement_sets[opt.moves]
     )
 
     # Apply Wrappers to environment
@@ -149,7 +205,7 @@ if __name__ == "__main__":
     # logger = MetricLogger(save_dir)
     # GlobalOptimizer = torch.optim.Adam(MarioNet((4, 84, 84), GlobalEnv.action_space.n).float().parameters(), lr=0.00025)
     
-    GlobalMario = Mario(state_dim=(4, 84, 84), action_dim=GlobalEnv.action_space.n, save_dir=save_dir, optimizer=None)
+    GlobalMario = Mario(opt, state_dim=(4, 84, 84), action_dim=GlobalEnv.action_space.n, save_dir=save_dir, optimizer=None)
     GlobalMario.net.share_memory()
     GlobalOptimizer = GlobalMario.optimizer
     # print("done 1")
@@ -167,18 +223,18 @@ if __name__ == "__main__":
     
     processes = []
     local_marios = []
-    for i in range(NUM_PROCESS):
+    for i in range(opt.num_process):
         if i == 0:
-            local_mario = Mario(state_dim=(4, 84, 84), action_dim=GlobalEnv.action_space.n, save_dir=save_dir, optimizer=GlobalOptimizer)
+            local_mario = Mario(opt, state_dim=(4, 84, 84), action_dim=GlobalEnv.action_space.n, save_dir=save_dir, optimizer=GlobalOptimizer)
         else:
-            local_mario = Mario(state_dim=(4, 84, 84), action_dim=GlobalEnv.action_space.n, save_dir=None, optimizer=GlobalOptimizer)
+            local_mario = Mario(opt, state_dim=(4, 84, 84), action_dim=GlobalEnv.action_space.n, save_dir=None, optimizer=GlobalOptimizer)
         local_marios.append(local_mario)
     # exit()
-    for i in range(NUM_PROCESS):
+    for i in range(opt.num_process):
         if i == 0:
-            process = mp.Process(target=train, args=(i, GlobalMario, GlobalOptimizer, local_marios[i], save_dir))
+            process = mp.Process(target=train, args=(opt, i, GlobalMario, GlobalOptimizer, local_marios[i], save_dir))
         else:
-            process = mp.Process(target=train, args=(i, GlobalMario, GlobalOptimizer, local_marios[i]))
+            process = mp.Process(target=train, args=(opt, i, GlobalMario, GlobalOptimizer, local_marios[i]))
         process.daemon = True
         process.start()
         processes.append(process)

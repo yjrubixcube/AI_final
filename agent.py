@@ -9,11 +9,11 @@ from itertools import islice
 
 
 class Mario:
-    def __init__(self, state_dim, action_dim, save_dir, optimizer, checkpoint=None):
+    def __init__(self, opt, state_dim, action_dim, save_dir, optimizer, checkpoint=None):
         self.state_dim = state_dim
         self.action_dim = action_dim
-        self.memory = deque(maxlen=100000)
-        self.batch_size = 32
+        self.memory = deque(maxlen=opt.mem_len*2)
+        self.batch_size = opt.batch_size
 
         self.exploration_rate = 1
         self.exploration_rate_decay = 0.99999975
@@ -28,9 +28,9 @@ class Mario:
         self.sync_every = 1250   # no. of experiences between Q_target & Q_online sync
 
         # self.MAX_MEM_LEN = 20000
-        self.MAX_MEM_LEN = 5000
+        self.MAX_MEM_LEN = opt.mem_len
 
-        self.save_every = 5e5   # no. of experiences between saving Mario Net
+        self.save_every = opt.save_every   # no. of experiences between saving Mario Net
         self.save_dir = save_dir
         self.save_index = 0
 
@@ -49,7 +49,7 @@ class Mario:
         if optimizer:
             self.optimizer = optimizer
         else:
-            self.optimizer = torch.optim.Adam(self.net.parameters(), lr=0.00025)
+            self.optimizer = torch.optim.Adam(self.net.parameters(), lr=opt.lr)
             
         self.loss_fn = torch.nn.SmoothL1Loss()
 
